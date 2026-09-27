@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Build index.html from basicsOfAgentsAndTools.md.
+
+Run from anywhere:  python3 build.py
+Needs pandoc. The layout, sidebar and type come from assets/guide.css and
+assets/guide.js, copied from the VS Code setup guide so the course sites match.
+
+Structure: every H1 in the markdown is a sidebar group. Every H2 under it is one
+sidebar entry (a section shown on its own). Every H3 is a sub-entry inside that
+section. An H1 with no H2s becomes a single entry.
+"""
+import html, re, subprocess, sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+SRC = HERE / "basicsOfAgentsAndTools.md"
+OUT = HERE / "index.html"
+
+TITLE = "Getting Started with Coding Agents"
+SUB = "What the pieces are, how a first hour goes, and what changes by project type."
+NAV_OVERRIDE = {"main-concepts": "Read this first"}
+GROUP_LABEL = {"glossary": "Reference"}
+
+md = SRC.read_text(encoding="utf-8")
+md = re.sub(r"<!--.*?-->\s*", "", md, flags=re.S)
+body = subprocess.run(["pandoc", "-f", "gfm", "-t", "html", "--wrap=none", "--no-highlight"],
+                      input=md, capture_output=True, text=True, check=True).stdout
+
+# light class hooks for the shared stylesheet
+body = re.sub(r"<table>", '<table class="simple">', body)
+body = re.sub(r"<pre[^>]*>", '<div class="cmd"><pre>', body)
+body = body.replace("</pre>", "</pre></div>")
+
+# split into heading-delimited chunks
+tok = re.split(r'(<h([123]) id="([^"]+)">(.*?)</h\2>)', body)
+# tok = [pre, full, lvl, id, text, chunk, full, lvl, id, text, chunk, ...]
+nodes = []  # (lvl, id, text, chunk)
+lead = tok[0]
+for i in range(1, len(tok), 5):
+    nodes.append((int(tok[i+1]), tok[i+2], tok[i+3], tok[i+4]))
+
+def plain(t): return html.unescape(re.sub(r"<[^>]+>", "", t)).strip()
+
+# group into parts -> topics -> steps
+parts = []
+for lvl, hid, text, chunk in nodes:
+    if lvl == 1:
+        parts.append({"id": hid, "title": plain(text), "intro": chunk, "topics": []})
+    elif lvl == 2:
+        parts[-1]["topics"].append({"id": hid, "title": plain(text), "body": chunk, "steps": []})
+    else:
+        t = parts[-1]["topics"]
+        if not t:  # H3 directly under an H1 with no H2 (none today, but keep it safe)
+            parts[-1]["intro"] += f'<h2>{text}</h2>{chunk}'
+        else:
+            t[-1]["steps"].append({"id": hid, "title": plain(text), "body": chunk})
+
+def section(pid, group, tid, title, lede_html, body_html, steps, nav=None):
+    out = [f'<section class="topic" id="{tid}" data-group="{html.escape(group)}" data-nav="{html.escape(nav or title)}">',
+           f'  <header>\n    <h1>{html.escape(title)}</h1>\n  </header>']
+    if lede_html.strip():
+        out.append(f'  <div class="lede-block">{lede_html}</div>')
+    out.append(body_html)
+    for s in steps:
+        out.append(f'  <article class="step" id="{tid}--{s["id"]}" data-nav="{html.escape(s["title"])}">\n    <h2>{html.escape(s["title"])}</h2>\n{s["body"]}  </article>')
+    out.append('</section>\n')
+    return "\n".join(out)
+
+sections = []
+for n, p in enumerate(parts, 1):
+    group = GROUP_LABEL.get(p["id"], f'Part {n} · {p["title"]}')
+    if not p["topics"]:
+        sections.append(section(p["id"], group, p["id"], p["title"], "", p["intro"], [], NAV_OVERRIDE.get(p["id"])))
+        continue
+    for i, t in enumerate(p["topics"]):
+        lede = p["intro"] if i == 0 else ""
+        sections.append(section(p["id"], group, t["id"], t["title"], lede, t["body"], t["steps"]))
+
+page = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{TITLE}</title>
+  <meta name="description" content="{html.escape(SUB)}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=National+Park:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='4' width='24' height='24' fill='%23000'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/guide.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the guide</a>
+
+<div class="topbar">
+  <button type="button" class="menu-btn" id="menu-btn" aria-expanded="false" aria-controls="sidebar">Sections</button>
+  <div class="topbar-title"><b id="topbar-topic">{TITLE}</b><span id="topbar-step"></span></div>
+</div>
+<button type="button" class="backdrop" id="backdrop" aria-label="Close the list of sections" tabindex="-1"></button>
+
+<div class="layout">
+<aside class="sidebar" id="sidebar" aria-label="Guide contents">
+  <div class="side-head">
+    <p class="side-title"><a href="#{parts[0]['id']}">{TITLE}</a></p>
+    <p class="side-sub">{html.escape(SUB)}</p>
+  </div>
+  <nav class="side-nav" id="nav" aria-label="Parts and sections"></nav>
+</aside>
+
+<main class="content" id="main"><div class="content-inner">
+
+<!-- GENERATED by build.py from basicsOfAgentsAndTools.md. Edit the markdown, then rebuild. -->
+
+{lead}
+{"".join(sections)}
+<p class="foot">Nick Puckett · Text as of September 4, 2026. This page is generated from the guide's markdown source.</p>
+
+</div></main>
+</div>
+<script src="assets/guide.js"></script>
+</body>
+</html>
+"""
+OUT.write_text(page, encoding="utf-8")
+n_topics = sum(len(p["topics"]) or 1 for p in parts)
+print(f"wrote {OUT.name}: {len(parts)} groups, {n_topics} sections, {sum(len(t['steps']) for p in parts for t in p['topics'])} sub-entries")
