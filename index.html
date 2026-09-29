@@ -631,7 +631,7 @@ every report with the single biggest risk in one sentence.</code></pre></div>
 <li><label><input type="checkbox" />Build mode used in small, checked steps</label></li>
 <li><label><input type="checkbox" />Committed and pushed along the way</label></li>
 <li><label><input type="checkbox" />Ran it and checked the result the way your channel needs (see Channels: Project Types)</label></li>
-<li><label><input type="checkbox" />Web projects only: Pages enabled with the GitHub Actions source, live URL confirmed</label></li>
+<li><label><input type="checkbox" />Web projects only: Pages switched on (Deploy from a branch, main), live URL confirmed</label></li>
 </ul>
 
 </section>
@@ -653,12 +653,12 @@ every report with the single biggest risk in one sentence.</code></pre></div>
 <p><strong>Enabling GitHub Pages</strong> takes a minute and can happen before or after building:</p>
 <ol type="1">
 <li>On the repo's GitHub page, open <strong>Settings → Pages</strong>.</li>
-<li>Under <strong>Build and deployment → Source</strong>, choose <strong>GitHub Actions</strong> rather than "Deploy from a branch." It deploys on each push and refreshes faster after changes.</li>
-<li>Pick the plain <strong>Static HTML</strong> workflow template, not a framework-specific one. This adds a small file under <code>.github/workflows/</code>.</li>
-<li>Commit and push that file. Adding it alone does nothing. A push to main triggers the build.</li>
-<li>The site goes live at the Pages URL. Give the first push a minute or two.</li>
+<li>Under <strong>Build and deployment</strong>, leave <strong>Source</strong> on <strong>Deploy from a branch</strong>. Set <strong>Branch</strong> to <strong>main</strong> and the folder to <strong>/ (root)</strong>, then click <strong>Save</strong>.</li>
+<li>Add an empty file named <code>.nojekyll</code> at the top of the repo. It tells Pages to publish your files exactly as they are, without running its Jekyll site builder over them.</li>
+<li>In about a minute the settings page says <strong>Your site is live at</strong>, with the Pages URL. Every push to main publishes again.</li>
 </ol>
-<p>The easier option is to ask the agent: "set up GitHub Pages for this repo using a GitHub Actions workflow that deploys on push to main." Read the file it writes before pushing, same as any other generated file. Some templates ship with the workflow already in place. Then only the Settings switch is needed. Keep the repo public, since free Pages hosting needs that.</p>
+<p>GitHub does not copy this setting when you make a repo from a template, so each new repo needs it once. From the terminal, or through an agent that has the GitHub CLI signed in, the same step is <code>gh api -X POST "repos/{owner}/{repo}/pages" -f "source[branch]=main" -f "source[path]=/"</code>. Keep the repo public, since free Pages hosting needs that.</p>
+<p>If the project needs a build step first (a bundler, a framework, a static site generator), choose <strong>Source → GitHub Actions</strong> instead, with a workflow that builds and deploys on each push. Ask the agent to write that workflow, and read the file before pushing, same as any other generated file. For plain HTML, CSS and JavaScript, the branch is simpler: there is no workflow to maintain, and saving the setting publishes straight away.</p>
 <p><strong>Three things that cause "it worked locally" bugs:</strong></p>
 <ul>
 <li>The main file must be named exactly <code>index.html</code> and sit at the repo root.</li>
